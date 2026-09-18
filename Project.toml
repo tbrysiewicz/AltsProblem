@@ -1,0 +1,21 @@
+name = "AltCertify"
+uuid = "4c6a9470-04e9-489f-93ce-cc910a16fc3a"
+version = "0.1.0"
+authors = ["tbrysiewicz <taylorbrysiewicz@gmail.com>"]
+
+[deps]
+Arblib = "fb37089c-8514-4489-9461-98f9c8763369"
+HomotopyContinuation = "f213a82b-91d6-5c5d-acf7-10f1c761b327"
+Oscar = "f1435218-dba5-11e9-1e4d-f1a5fab5fc13"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[compat]
+HomotopyContinuation = "2.22.4"
+Oscar = "1.8.2"
+Random = "1.11.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
