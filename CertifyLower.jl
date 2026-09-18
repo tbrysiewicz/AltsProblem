@@ -77,3 +77,10 @@ function certify_lower(; output_dir::AbstractString=joinpath(@__DIR__, "Certific
     println("Saved $certified distinct certificates.")
     return C
 end
+
+"""
+    certify_alt_lower(; kwargs...)
+
+Alias for `certify_lower` so the naming matches the paper's description.
+"""
+certify_alt_lower(; kwargs...) = certify_lower(; kwargs...)

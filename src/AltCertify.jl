@@ -56,5 +56,6 @@ export certify_regime, CertificationRun, guard_excludes_zero
 using .Certify: certify, reproduce_certification
 export certify, reproduce_certification
 export certify_lower
+export certify_alt_lower
 
 end
