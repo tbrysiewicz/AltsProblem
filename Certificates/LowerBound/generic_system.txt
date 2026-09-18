@@ -1,0 +1,49 @@
+system = AltsProblem()
+seed = 20260918
+expected = 8652
+variables = Variable[x, a, y, b, xhat, ahat, yhat, bhat, γ₁, γ₂, γ₃, γ₄, γ₅, γ₆, γ₇, γ₈, γhat₁, γhat₂, γhat₃, γhat₄, γhat₅, γhat₆, γhat₇, γhat₈]
+parameters = Variable[δ₁, δ₂, δ₃, δ₄, δ₅, δ₆, δ₇, δ₈, δhat₁, δhat₂, δhat₃, δhat₄, δhat₅, δhat₆, δhat₇, δhat₈]
+
+exact parameter values:
+δ₁ = -359//925
+δ₂ = 108//281
+δ₃ = -461//336
+δ₄ = 142//165
+δ₅ = -769//251
+δ₆ = -758//613
+δ₇ = 409//413
+δ₈ = -753//865
+δhat₁ = -828//857
+δhat₂ = -67//94
+δhat₃ = 308//193
+δhat₄ = 352//135
+δhat₅ = -187//642
+δhat₆ = 439//253
+δhat₇ = -123//161
+δhat₈ = 51//112
+
+equations:
+F[1] = γ₁*(x*ahat - x*δhat₁) - δ₁*δhat₁ + (a - x)*δhat₁ + (ahat - xhat)*δ₁ + (a*xhat - xhat*δ₁)*γhat₁
+F[2] = γ₂*(x*ahat - x*δhat₂) - δ₂*δhat₂ + (a - x)*δhat₂ + (ahat - xhat)*δ₂ + (a*xhat - xhat*δ₂)*γhat₂
+F[3] = γ₃*(x*ahat - x*δhat₃) - δ₃*δhat₃ + (a - x)*δhat₃ + (ahat - xhat)*δ₃ + (a*xhat - xhat*δ₃)*γhat₃
+F[4] = γ₄*(x*ahat - x*δhat₄) - δ₄*δhat₄ + (a - x)*δhat₄ + (ahat - xhat)*δ₄ + (a*xhat - xhat*δ₄)*γhat₄
+F[5] = γ₅*(x*ahat - x*δhat₅) - δ₅*δhat₅ + (a - x)*δhat₅ + (ahat - xhat)*δ₅ + (a*xhat - xhat*δ₅)*γhat₅
+F[6] = γ₆*(x*ahat - x*δhat₆) - δ₆*δhat₆ + (a - x)*δhat₆ + (ahat - xhat)*δ₆ + (a*xhat - xhat*δ₆)*γhat₆
+F[7] = γ₇*(x*ahat - x*δhat₇) - δ₇*δhat₇ + (a - x)*δhat₇ + (ahat - xhat)*δ₇ + (a*xhat - xhat*δ₇)*γhat₇
+F[8] = γ₈*(x*ahat - x*δhat₈) - δ₈*δhat₈ + (a - x)*δhat₈ + (ahat - xhat)*δ₈ + (a*xhat - xhat*δ₈)*γhat₈
+F[9] = γ₁*(y*bhat - y*δhat₁) - δ₁*δhat₁ + (b - y)*δhat₁ + (bhat - yhat)*δ₁ + (b*yhat - yhat*δ₁)*γhat₁
+F[10] = γ₂*(y*bhat - y*δhat₂) - δ₂*δhat₂ + (b - y)*δhat₂ + (bhat - yhat)*δ₂ + (b*yhat - yhat*δ₂)*γhat₂
+F[11] = γ₃*(y*bhat - y*δhat₃) - δ₃*δhat₃ + (b - y)*δhat₃ + (bhat - yhat)*δ₃ + (b*yhat - yhat*δ₃)*γhat₃
+F[12] = γ₄*(y*bhat - y*δhat₄) - δ₄*δhat₄ + (b - y)*δhat₄ + (bhat - yhat)*δ₄ + (b*yhat - yhat*δ₄)*γhat₄
+F[13] = γ₅*(y*bhat - y*δhat₅) - δ₅*δhat₅ + (b - y)*δhat₅ + (bhat - yhat)*δ₅ + (b*yhat - yhat*δ₅)*γhat₅
+F[14] = γ₆*(y*bhat - y*δhat₆) - δ₆*δhat₆ + (b - y)*δhat₆ + (bhat - yhat)*δ₆ + (b*yhat - yhat*δ₆)*γhat₆
+F[15] = γ₇*(y*bhat - y*δhat₇) - δ₇*δhat₇ + (b - y)*δhat₇ + (bhat - yhat)*δ₇ + (b*yhat - yhat*δ₇)*γhat₇
+F[16] = γ₈*(y*bhat - y*δhat₈) - δ₈*δhat₈ + (b - y)*δhat₈ + (bhat - yhat)*δ₈ + (b*yhat - yhat*δ₈)*γhat₈
+F[17] = γhat₁ + γ₁ + γ₁*γhat₁
+F[18] = γhat₂ + γ₂ + γ₂*γhat₂
+F[19] = γhat₃ + γ₃ + γ₃*γhat₃
+F[20] = γhat₄ + γ₄ + γ₄*γhat₄
+F[21] = γhat₅ + γ₅ + γ₅*γhat₅
+F[22] = γhat₆ + γ₆ + γ₆*γhat₆
+F[23] = γhat₇ + γ₇ + γ₇*γhat₇
+F[24] = γhat₈ + γ₈ + γ₈*γhat₈

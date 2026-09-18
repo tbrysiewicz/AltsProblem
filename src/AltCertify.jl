@@ -38,6 +38,7 @@ include("BoundaryRegistry.jl")
 include("BoundaryCompatibility.jl")
 include("normalize_boundary.jl")
 include("Certify.jl")
+include("../CertifyLower.jl")
 
 using .Certify: certify_regime, CertificationRun, guard_excludes_zero
 
@@ -54,5 +55,6 @@ export hc_compatibility_system
 export certify_regime, CertificationRun, guard_excludes_zero
 using .Certify: certify, reproduce_certification
 export certify, reproduce_certification
+export certify_lower
 
 end
