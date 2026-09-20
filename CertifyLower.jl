@@ -32,7 +32,7 @@ function certify_lower(; output_dir::AbstractString=joinpath(@__DIR__, "Certific
     nonzero_integer() = (rand(rng, Bool) ? 1 : -1) * rand(rng, 1:1000)
     Pnew = [BigInt(nonzero_integer()) // BigInt(nonzero_integer()) for _ in P]
     println("Tracking solutions to exact rational parameters...")
-    T = solve(F, S; start_parameters=P, target_parameters=Pnew,
+    T = HomotopyContinuation.solve(F, S; start_parameters=P, target_parameters=Pnew,
               show_progress=show_progress)
     tracked = [path.solution for path in path_results(T)]
     length(tracked) == expected ||
