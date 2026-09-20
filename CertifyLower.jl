@@ -79,8 +79,8 @@ function certify_lower(; output_dir::AbstractString=joinpath(@__DIR__, "Certific
 end
 
 """
-    certify_alt_lower(; kwargs...)
+    certify_alt_mechanisms(; kwargs...)
 
 Alias for `certify_lower` so the naming matches the paper's description.
 """
-certify_alt_lower(; kwargs...) = certify_lower(; kwargs...)
+certify_alt_mechanisms(; kwargs...) = certify_lower(; kwargs...)
