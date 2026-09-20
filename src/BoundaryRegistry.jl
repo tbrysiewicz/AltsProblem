@@ -39,6 +39,14 @@ end
 @assert sum(b.count for b in BOUNDARY_REGIMES) == 4096
 @assert length(unique(b.id for b in BOUNDARY_REGIMES)) == 26
 
+# Retain the chart-specific open conditions as well as the automatically
+# derived leading-coordinate and row-operation guards.
+for (id, guard) in ((:B131, guard_B131), (:B141, guard_B141))
+    B = boundary_regime(id)
+    B.declared_guard = guard
+    B.guard = guard
+end
+
 # Public REPL names. Every B... binding has the same BoundaryRegime type.
 const B11 = boundary_regime(:B11)
 const B21 = boundary_regime(:B21)

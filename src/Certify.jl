@@ -3,9 +3,10 @@ module Certify
 using HomotopyContinuation
 using Arblib
 using Oscar
+using Random
 using ..AltCertify: BoundaryRegime, generate_homotopy, finite_compatibility_system,
           hc_compatibility_system, has_compatibility_constructor,
-          evaluate_guard_factor, RECORDED_COMPATIBILITY_IDS, GENERAL_COMPATIBILITY_IDS
+          boundary_construction_method
 
 export nearby_rational,
        nearby_rational_parameters,
@@ -101,7 +102,7 @@ end
 Run the certification pipeline for a parameterized square
 `HomotopyContinuation.System` `F`:
 
-1. Let monodromy choose a start pair and solve a Float64 fiber.
+1. Seed monodromy from a numerical solve of a Float64 fiber.
 2. Soft-certify that numerical fiber.
 3. Replace the parameter vector by a nearby exact Gaussian-rational vector.
 4. Track all certified solutions to that nearby parameter vector.
@@ -131,32 +132,40 @@ function certify_regime(
     monodromy_seed::Union{Nothing,Integer}=nothing,
     show_progress::Bool=true,
 )
+    expected === nothing || expected > 0 ||
+        throw(ArgumentError("expected must be positive or nothing"))
+    nparameters = length(HomotopyContinuation.parameters(F))
+    nparameters > 0 || throw(ArgumentError("F must have parameters"))
+    rng = isnothing(monodromy_seed) ? Random.default_rng() : MersenneTwister(monodromy_seed)
+    target_options = expected === nothing ? (;) :
+        (; target_solutions_count=expected, min_solutions=expected)
     M = nothing
     sols = nothing
     for attempt in 1:10
-    println("0. SEED THE MONODROMY SOLVE")
-    #This is required for systems with positive dimensional components so that we 
-    # stay on the one with regular solutions 
-
-    Pinitial = randn(ComplexF64,63)
-    Sinitial = solutions(HomotopyContinuation.solve(F;target_parameters = Pinitial))
-
-
-    println("1. MONODROMY SOLVE")
-    expected === nothing && error("certify_regime requires expected")
+        println("0. SEED THE MONODROMY SOLVE")
+        # Select isolated regular solutions even when other components exist.
+        Pinitial = randn(rng, ComplexF64, nparameters)
+        Sinitial = solutions(HomotopyContinuation.solve(F;
+            target_parameters=Pinitial, seed=rand(rng, UInt32),
+            show_progress=show_progress))
+        isempty(Sinitial) && continue
+        println("1. MONODROMY SOLVE")
         M = HomotopyContinuation.monodromy_solve(
             F,Sinitial,Pinitial;
-            target_solutions_count=expected,
-            min_solutions=expected,
+            target_options...,
             unique_points_rtol=0.0000000000001,
             duplicate_check=:certified,
+            certification_max_precision=max_precision,
+            seed=rand(rng, UInt32),
+            show_progress=show_progress,
         )
         sols = HomotopyContinuation.solutions(M)
-        length(sols) == expected && break
+        (expected === nothing || length(sols) == expected) && break
         attempt < 10 && println(
             "monodromy found $(length(sols)) of $(expected); retrying ($(attempt)/10)"
         )
     end
+    M === nothing && error("No isolated regular seed solutions found in 10 attempts")
     pfloat = ComplexF64.(HomotopyContinuation.parameters(M))
     println("parameter count: ", length(pfloat))
     println("monodromy solutions: ", length(sols))
@@ -185,12 +194,15 @@ function certify_regime(
     T = HomotopyContinuation.solve(
         F, sols;
         start_parameters=HomotopyContinuation.parameters(M),
-        target_parameters=pstar,
+        target_parameters=ComplexF64.(pstar),
+        seed=rand(rng, UInt32),
         show_progress=show_progress,
     )
-    #Do not throw out points HC.jl thinks are singular
-    tracked = [path.solution for path in HomotopyContinuation.path_results(T)]
-    println("successfully tracked solutions: ", length(tracked))
+    # Retain finite candidates, including endpoints flagged as singular.
+    # Only the following exact certification establishes that they are roots.
+    tracked = [path.solution for path in HomotopyContinuation.path_results(T)
+               if all(isfinite, path.solution)]
+    println("finite endpoint candidates for hard certification: ", length(tracked))
     expected === nothing || length(tracked) == expected ||
         error("Parameter homotopy returned $(length(tracked)) solutions; expected $expected.")
 
@@ -249,14 +261,11 @@ function certify(B::BoundaryRegime;
     data = generate_homotopy(; seed=seed)
     K, _, orders = finite_compatibility_system(
         B, data.H4, data.ss, data.u, data.epsilon, data.delta)
-    B.K = K
-    B.orders = orders
     F = hc_compatibility_system(K, vec(data.ell);
-        keep_parameters=true, seed=seed)
-    guard_at_parameters = B.guard_factors === nothing ? nothing :
-        p -> X -> [evaluate_guard_factor(f, data.u, X, vec(data.ell), p)
-                   for f in B.guard_factors]
-    run = certify_regime(F, B.guard;
+        keep_parameters=true, seed=seed, variables=data.u)
+    boundary_guard = B.guard
+    guard_at_parameters = p -> X -> boundary_guard(X, vec(data.ell), p)
+    run = certify_regime(F, boundary_guard;
         guard_at_parameters=guard_at_parameters,
         expected=B.count, rational_tol=rational_tol,
         max_precision=max_precision, monodromy_seed=seed,
@@ -270,37 +279,25 @@ function certify(B::BoundaryRegime;
         println(io, "expected = ", B.count)
         println(io, "ramification = ", B.e)
         println(io, "delta_orders = ", orders)
-        if B.id === :B42 || B.id === :B43 || B.id === :B44
-            if B.id === :B42
-                println(io, "normalization = L_i = (delta*u[9])^3 * H_i(S_B42(u,delta),delta^2)")
-            elseif B.id === :B43
-                println(io, "normalization = L_i = (delta*u[9])^2 * H_i(S_B43(u,delta),delta^3)")
-            else
-                println(io, "normalization = L_i = delta^-5 * (delta^4*u[5])^d_i * H_i(S_B44(u,delta),delta^5)")
-                println(io, "d = (5,5,4,5,4,4,5,4,4)")
-            end
-            println(io, "chart = S_", B.id, ", defined in BoundaryData/", B.id, ".jl")
-            println(io, "guard = ", factor(B.guard(data.u)))
+        println(io, "construction = ", boundary_construction_method(B))
+        println(io, "source = ", B.source, ".jl")
+        println(io, "coordinate_orders = ", B.coordinate_orders)
+        println(io, "construction_metadata = ", B.construction_metadata)
+        println(io, "guard_factors =")
+        for (i, f) in enumerate(B.guard_factors)
+            println(io, "q[", i, "] = ", f)
         end
-        if B.id in RECORDED_COMPATIBILITY_IDS || B.id in GENERAL_COMPATIBILITY_IDS
-            constructor = B.id in GENERAL_COMPATIBILITY_IDS ?
-                "BoundaryCompatibilityGeneral.construct_boundary_compatibility" :
-                "BoundaryCompatibilityExtras.construct_boundary_compatibility"
-            println(io, "construction = ", constructor)
-            println(io, "row_orders = ", B.orders)
-            println(io, "guard_factors =")
-            for (i, f) in enumerate(B.guard_factors)
-                println(io, "q[", i, "] = ", factor(f))
-            end
-            println(io, "S(u,delta) =")
-            Q = fraction_field(parent(data.H4[1]))
-            for (i, coordinate) in enumerate(B.chart(Q.(data.u), Q(data.delta)))
-                println(io, "S[", i, "] = ", coordinate)
-            end
-            println(io, "M(u,delta) =")
-            for i in 1:9, j in 1:9
-                iszero(B.M[i, j]) || println(io, "M[", i, ",", j, "] = ", B.M[i, j])
-            end
+        println(io, "S(u,delta) =")
+        for (i, coordinate) in enumerate(B.S)
+            println(io, "S[", i, "] = ", coordinate)
+        end
+        println(io, "M(u,delta) =")
+        for i in 1:size(B.M, 1), j in 1:size(B.M, 2)
+            iszero(B.M[i, j]) || println(io, "M[", i, ",", j, "] = ", B.M[i, j])
+        end
+        println(io, "L(u,delta) =")
+        for (i, row) in enumerate(B.L)
+            println(io, "L[", i, "] = ", row)
         end
         println(io, "\nlambda_star =")
         for (lambda, value) in zip(data.ell, run.rational_parameters)
@@ -330,7 +327,14 @@ function certify(B::BoundaryRegime;
     return run
 end
 
-"""Re-run a saved certification, using the seed recorded in its system file."""
+"""
+Re-run the full pipeline using the saved construction seed.
+
+This is a new solve and certification, not a replay of the archived intervals
+or exact parameter fiber. It overwrites the files beneath `output_root/B.id`
+only after successful certification. The archived runs predate deterministic
+numerical seeding and need not regenerate the same rational parameters.
+"""
 function reproduce_certification(B::BoundaryRegime;
                                  output_root::AbstractString="Certificates",
                                  kwargs...)

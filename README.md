@@ -66,7 +66,7 @@ julia> certify(B11)
    maximum parameter displacement: 1.4060347687259386e-12
    exact parameter vector constructed.
 4. PARAMETER HOMOTOPY TO RATIONAL FIBER
-   successfully tracked solutions: 1322
+   finite endpoint candidates for hard certification: 1322
 5. HARD CERTIFICATION AT EXACT RATIONAL PARAMETERS
    hard-certified distinct solutions: 1322
 6. GUARD CHECK ON CERTIFIED BOXES
@@ -76,6 +76,18 @@ julia> certify(B11)
 
 By default, the exact system, construction metadata, and interval certificates
 are written beneath `Certificates/B11`.
+
+Every boundary follows this same API. `normalize_boundary(B)` returns
+`(L, M, K, guard)` and stores its substitution as `B.S`. The identities are
+`L = M*H(S,delta^B.e)` and `K = L(u,0)`. After construction, `guard` returns a
+list of factor values; parameter-dependent guards also accept the original
+parameter symbols and their exact values. `certify(B)` binds those parameters
+automatically. See [the boundary audit](BOUNDARY_AUDIT.md) for the necessary
+differences in row operations and the verification commands.
+
+`reproduce_certification(B)` performs a new solve using the saved seed and
+overwrites that boundary's output after success; it does not replay the old
+interval certificates.
 
 ## Certify the lower bound for Alt's problem
 

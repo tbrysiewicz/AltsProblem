@@ -22,6 +22,20 @@ mutable struct BoundaryRegime
     L::Any
     M::Any
     guard_factors::Any
+    declared_guard::Function   # stable chart guard; never replaced by a built guard
+    S::Any
+    coordinate_orders::Any
+    construction_metadata::Any
+end
+
+# Preserve the existing positional construction API. Runtime construction data
+# belong to each regime, while declared_guard always retains the original guard.
+function BoundaryRegime(id, name, omega, e, facial_indices, u_indices,
+                        substitution, row_factors, guard, count, source, chart,
+                        K, orders, L, M, guard_factors)
+    BoundaryRegime(id, name, omega, e, facial_indices, u_indices,
+        substitution, row_factors, guard, count, source, chart,
+        K, orders, L, M, guard_factors, guard, nothing, nothing, nothing)
 end
 
 """
@@ -47,16 +61,16 @@ end
 
 function BoundaryRegime(id, omega, e, count, source,
                         data::BoundaryRegime)
-    label = "BoundaryData/" * String(id)
+    label = String(source)
     BoundaryRegime(Symbol(id), data.name, Rational{Int}.(omega), e,
         data.facial_indices, data.u_indices, data.substitution,
-        data.row_factors, data.guard, count, label, data.substitution,
+        data.row_factors, data.declared_guard, count, label, data.substitution,
         nothing, nothing, nothing, nothing, nothing)
 end
 
 function BoundaryRegime(id, omega, e, count, source,
                         chart::Function)
-    label = "BoundaryData/" * String(id)
+    label = String(source)
     BoundaryRegime(Symbol(id), String(id), Rational{Int}.(omega), e,
         Int[], Int[], chart, _no_extra_factors, X -> one(X[1]),
         count, label, chart, nothing, nothing, nothing, nothing, nothing)
@@ -68,7 +82,7 @@ function BoundaryRegime(id, omega, e, count, source,
 end
 
 function BoundaryRegime(id, omega, e, count, source)
-    label = "BoundaryData/" * String(id)
+    label = String(source)
     BoundaryRegime(Symbol(id), String(id), Rational{Int}.(omega), e,
         Int[], Int[], X -> error("no chart recorded for $(id)"),
         _no_extra_factors, X -> one(X[1]), count, label, nothing,
@@ -118,95 +132,41 @@ Base.getproperty(B::BoundaryRegime, name::Symbol) =
 # ============================================================
 
 function delta_order(f,delta)
+    iszero(f) && error("An identically zero row needs a different compatibility construction")
     i = var_index(delta)
     ord(p) = minimum(Int(a[i]) for a in exponents(p))
     ord(numerator(f))-ord(denominator(f))
 end
 
-function construct_scaled_boundary(B::BoundaryRegime, H, s, u, epsilon, delta, scales)
-    A = parent(H[1])
-    Q = fraction_field(A)
-    uQ = Q.(u)
-    deltaQ = Q(delta)
-    row_scales = scales(uQ, deltaQ)
+function construct_scaled_boundary(B::BoundaryRegime, H, s, u, epsilon, delta, scales;
+                                   automatic_orders=false)
+    A = parent(H[1]); Q = fraction_field(A)
+    uq, dq = Q.(u), Q(delta)
+    row_scales = scales(uq, dq)
     length(row_scales) == length(H) || error("$(B.id) needs one scale per row")
-
     images = Q.(gens(A))
-    images[var_index.(s)] = B.chart(uQ, deltaQ)
-    images[var_index(epsilon)] = deltaQ^B.e
+    images[var_index.(s)] = B.chart(uq, dq)
+    images[var_index(epsilon)] = dq^B.e
     phi = hom(A, Q, images)
-
+    substituted = phi.(H)
+    initial_orders = [delta_order(f, delta) for f in substituted]
+    rows = [row_scales[i]*substituted[i] for i in eachindex(H)]
+    orders = automatic_orders ? [delta_order(f, delta) for f in rows] :
+                               zeros(Int, length(H))
     M = zero_matrix(Q, length(H), length(H))
-    L = Vector{typeof(deltaQ)}(undef, length(H))
-    K = Vector{typeof(zero(A))}(undef, length(H))
+    L = similar(rows)
     for i in eachindex(H)
-        M[i, i] = row_scales[i]
-        row = row_scales[i] * phi(H[i])
-        common = gcd(numerator(row), denominator(row))
-        row = Q(divexact(numerator(row), common)) /
-              Q(divexact(denominator(row), common))
-        den0 = Oscar.evaluate(denominator(row), [delta], [zero(A)])
-        iszero(den0) && error("$(B.id) row $i is not regular at delta=0")
-        num0 = Oscar.evaluate(numerator(row), [delta], [zero(A)])
-        K[i] = numerator(Q(num0) / Q(den0))
-        L[i] = row
+        M[i,i] = row_scales[i]/dq^orders[i]
+        L[i] = rows[i]/dq^orders[i]
     end
-
-    B.L = L
-    B.M = M
-    B.K = K
-    B.orders = fill(0, length(H))
-    return L, M, K, B.guard
+    out = (; L, M, row_orders=orders, initial_orders,
+             guard_factors=typeof(zero(A))[])
+    return finish_boundary_construction!(B, out, H, s, u, epsilon, delta)
 end
 
-function finite_compatibility_system(B::BoundaryRegime,H,s,u,epsilon,delta)
-    if B.id === :B42
-        _, _, K, _ = construct_B42(B, H, s, u, epsilon, delta)
-        return K, ideal(parent(H[1]), K), B.orders
-    elseif B.id === :B43
-        _, _, K, _ = construct_B43(B, H, s, u, epsilon, delta)
-        return K, ideal(parent(H[1]), K), B.orders
-    elseif B.id === :B44
-        _, _, K, _ = construct_B44(B, H, s, u, epsilon, delta)
-        return K, ideal(parent(H[1]), K), B.orders
-    elseif B.id in RECORDED_COMPATIBILITY_IDS
-        _, _, K, _ = construct_recorded_boundary(B, H, s, u, epsilon, delta)
-        return K, ideal(parent(H[1]), K), B.orders
-    elseif B.id in GENERAL_COMPATIBILITY_IDS
-        _, _, K, _ = construct_general_boundary(B, H, s, u, epsilon, delta)
-        return K, ideal(parent(H[1]), K), B.orders
-    end
-    isempty(B.facial_indices) &&
-        error("$(B.id) has no compatibility constructor")
-    A = parent(H[1]); Kfrac = fraction_field(A)
-    uK = Kfrac.(u); deltaF = Kfrac(delta)
-
-    images = Kfrac.(gens(A))
-    images[var_index.(s)] = B.substitution(uK,deltaF)
-    images[var_index(epsilon)] = deltaF^B.e
-    phi = hom(A,Kfrac,images)
-
-    Hsub = phi.(H)
-
-    # Remove boundary-specific non-delta factors first.
-    extras = B.row_factors(uK,deltaF)
-    Hsub = [Hsub[i]/extras[i] for i in eachindex(Hsub)]
-
-    # Find and remove the lowest delta power automatically.
-    orders = [delta_order(h,delta) for h in Hsub]
-    Hscaled = [Hsub[i]/deltaF^orders[i] for i in eachindex(Hsub)]
-
-    # Set delta = 0.
-    K = map(Hscaled) do f
-        num = Oscar.evaluate(numerator(f),[delta],[zero(A)])
-        den = Oscar.evaluate(denominator(f),[delta],[zero(A)])
-        @assert !iszero(den)
-        numerator(Kfrac(num)/Kfrac(den))
-    end
-
-    B.K = K
-    B.orders = orders
-    return K, ideal(A,K), orders
+function finite_compatibility_system(B::BoundaryRegime, H, s, u, epsilon, delta)
+    _, _, K, _ = normalize_boundary(B, H, s, u, epsilon, delta)
+    return K, ideal(parent(H[1]), K), B.orders
 end
 
 
@@ -215,7 +175,17 @@ end
 # ============================================================
 
 function toHC(f,oscarvars,hcvars)
+    length(oscarvars) == length(hcvars) ||
+        throw(ArgumentError("Oscar/HC symbol counts differ"))
     inds = var_index.(oscarvars)
+    length(unique(inds)) == length(inds) ||
+        throw(ArgumentError("Each Oscar symbol must be bound exactly once"))
+    bound = Set(inds)
+    for a in exponents(f)
+        any(a[j] != 0 for j in eachindex(a) if !(j in bound)) &&
+            throw(ArgumentError("Unbound symbol in Oscar-to-HC conversion"))
+    end
+    iszero(f) && return 0
     sum(begin
         c = coeff(f,i); a = exponent_vector(f,i)
         cq = Rational{BigInt}(BigInt(numerator(c)),BigInt(denominator(c)))
@@ -258,52 +228,27 @@ function hc_compatibility_system(B::BoundaryRegime; keep_parameters=true, seed=2
     )
 
     return hc_compatibility_system(K,vec(data.ell);
-        keep_parameters=keep_parameters, seed=seed)
+        keep_parameters=keep_parameters, seed=seed, variables=data.u)
 end
 
-function hc_compatibility_system(K,parameters; keep_parameters=false, seed=20260917)
-    R = parent(first(K))
-    gensR = collect(gens(R))
-    parameter_positions = Set(var_index.(parameters))
-
+function hc_compatibility_system(K, parameters; keep_parameters=false,
+                                 seed=20260917, variables=nothing)
+    parameters = collect(parameters)
+    unknowns = isnothing(variables) ?
+        [v for v in active_variables(K) if !(v in parameters)] : collect(variables)
+    length(unknowns) == length(K) ||
+        throw(ArgumentError("Compatibility system must have one equation per local variable"))
+    isempty(intersect(unknowns, parameters)) ||
+        throw(ArgumentError("Local variables and parameters must be disjoint"))
+    hcvars = HomotopyContinuation.ModelKit.variables(:u, 1:length(unknowns))
     if keep_parameters
-        # Find the active nonparameter Oscar variables.
-        used = falses(length(gensR))
-        for f in K, a in exponents(f)
-            used .|= a .!= 0
-        end
-
-        variable_positions = [i for i in eachindex(gensR)
-            if used[i] && !(i in parameter_positions)]
-
-        variables = gensR[variable_positions]
-
-        # Make separate HC variables and parameters.
-        hcvars = HomotopyContinuation.ModelKit.variables(:u,1:length(variables))
-        hcparams = HomotopyContinuation.ModelKit.variables(:l,1:length(parameters))
-
-        oscar_symbols = vcat(variables,collect(parameters))
-        hc_symbols = vcat(hcvars,hcparams)
-
-        Khc = [toHC(f,oscar_symbols,hc_symbols) for f in K]
-
+        hcparams = HomotopyContinuation.ModelKit.variables(:l, 1:length(parameters))
+        Khc = [toHC(f, vcat(unknowns, parameters), vcat(hcvars, hcparams)) for f in K]
         return System(Khc; variables=hcvars, parameters=hcparams)
-
-    else
-        rng = MersenneTwister(seed)
-        vals = [random_nonzero_integer(rng) for _ in parameters]
-        Kspec = [Oscar.evaluate(f,parameters,vals) for f in K]
-
-        used = falses(length(gensR))
-        for f in Kspec, a in exponents(f)
-            used .|= a .!= 0
-        end
-
-        variables = gensR[used]
-        hcvars = HomotopyContinuation.ModelKit.variables(:u,1:length(variables))
-
-        Khc = [toHC(f,variables,hcvars) for f in Kspec]
-
-        return System(Khc; variables=hcvars)
     end
+    rng = MersenneTwister(seed)
+    vals = [random_nonzero_integer(rng) for _ in parameters]
+    Kspec = [Oscar.evaluate(f, parameters, vals) for f in K]
+    Khc = [toHC(f, unknowns, hcvars) for f in Kspec]
+    return System(Khc; variables=hcvars)
 end
